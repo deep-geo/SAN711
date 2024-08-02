@@ -61,8 +61,8 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
         if args.boxes_prompt:
             save_path = os.path.join(args.work_dir, args.run_name, "boxes_prompt")
             batched_input["point_coords"], batched_input["point_labels"] = None, None
-            masks, low_res_masks, iou_predictions = prompt_and_decoder(
-                args, batched_input, model, image_embeddings)
+            masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+                prompt_and_decoder(args, batched_input, model, image_embeddings)
             points_show = None
 
         else:
@@ -74,7 +74,8 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
                 batched_input["point_labels"]]
 
             for p in range(args.iter_point):
-                masks, low_res_masks, iou_predictions = prompt_and_decoder(args, batched_input, model, image_embeddings)
+                masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+                    prompt_and_decoder(args, batched_input, model, image_embeddings)
                 if p != args.iter_point - 1:
                     batched_input = generate_point(masks, labels, low_res_masks, batched_input, args.point_num)
                     batched_input = to_device(batched_input, args.device)
@@ -197,8 +198,8 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, test
             if p == init_mask_num or p == args.iter_point - 1:
                 batched_input = setting_prompt_none(batched_input)
 
-            masks, low_res_masks, iou_predictions = prompt_and_decoder(
-                args, batched_input, model, image_embeddings, decoder_iter=True)
+            masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+                prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=True)
 
             loss = criterion(masks, labels, iou_predictions)
             loss.backward(retain_graph=True)
