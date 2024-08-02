@@ -178,9 +178,11 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, test
         normal_edge_labels = batched_input["normal_edge_mask"]
         normal_edge_mask_loss = criterion(normal_edge_masks, normal_edge_labels, normal_edge_iou_predictions)
         # loss3: cluster edge mask loss
-        # todo
+        cluster_edge_labels = batched_input["cluster_edge_mask"]
+        cluster_edge_mask_loss = criterion(cluster_edge_masks, cluster_edge_labels,
+                                          cluster_edge_iou_predictions)
 
-        loss = 0.5 * mask_loss + 0.5 * normal_edge_mask_loss
+        loss = 0.35 * mask_loss + 0.35 * normal_edge_mask_loss + 0.35 * cluster_edge_mask_loss
 
         loss.backward(retain_graph=False)
 
