@@ -1,0 +1,1 @@
+python train.py --resume None --sam_checkpoint None
