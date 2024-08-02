@@ -107,7 +107,7 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
     log_predictions_to_wandb(
             batched_input["image_path"], masks, labels, 
             normal_edge_masks, batched_input["normal_edge_mask"], 
-            normal_edge_masks, batched_input["normal_edge_mask"], 
+            cluster_edge_masks, batched_input["cluster_edge_mask"],
             #cluster_edge_masks,  cluster_edge_masks_gt,
             step=global_step, prefix='visualize', num_samples=5)
     

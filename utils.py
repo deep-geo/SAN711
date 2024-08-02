@@ -640,8 +640,6 @@ def apply_colormap(mask):
     return colored_mask
 
 
-
-
 def log_predictions_to_wandb(image_paths, seg_masks, seg_masks_gt, 
                              normal_edge_masks, normal_edge_masks_gt, cluster_edge_masks, cluster_edge_masks_gt,
                              step, prefix='visual compare', num_samples=5):
