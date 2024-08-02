@@ -406,6 +406,7 @@ def main(args):
         train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, test_loader, gt_total, run_dir)
         scheduler.step()
 
+
 if __name__ == '__main__':
     mp.set_start_method('spawn')
     args = parse_train_args()
