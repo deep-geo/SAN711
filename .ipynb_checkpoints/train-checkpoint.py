@@ -61,8 +61,8 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
         if args.boxes_prompt:
             save_path = os.path.join(args.work_dir, args.run_name, "boxes_prompt")
             batched_input["point_coords"], batched_input["point_labels"] = None, None
-            masks, low_res_masks, iou_predictions = prompt_and_decoder(
-                args, batched_input, model, image_embeddings)
+            masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+                prompt_and_decoder(args, batched_input, model, image_embeddings)
             points_show = None
 
         else:
@@ -74,7 +74,8 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
                 batched_input["point_labels"]]
 
             for p in range(args.iter_point):
-                masks, low_res_masks, iou_predictions = prompt_and_decoder(args, batched_input, model, image_embeddings)
+                masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+                    prompt_and_decoder(args, batched_input, model, image_embeddings)
                 if p != args.iter_point - 1:
                     batched_input = generate_point(masks, labels, low_res_masks, batched_input, args.point_num)
                     batched_input = to_device(batched_input, args.device)
@@ -101,7 +102,9 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
 
     log_predictions_to_wandb(
             batched_input["image_path"], masks, labels, 
-            #normal_edge_masks, normal_edge_masks_gt, cluster_edge_masks,  cluster_edge_masks_gt,
+            normal_edge_masks, batched_input["normal_edge_mask"], 
+            normal_edge_masks, batched_input["normal_edge_mask"], 
+            #cluster_edge_masks,  cluster_edge_masks_gt,
             step=global_step, prefix='visualize', num_samples=5)
     
     average_loss = np.mean(test_loss)
@@ -162,10 +165,19 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, test
 
         image_embeddings = torch.cat(image_embeddings_repeat, dim=0)
 
-        masks, low_res_masks, iou_predictions = prompt_and_decoder(
-            args, batched_input, model, image_embeddings, decoder_iter=False)
+        masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+            prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=False)
 
-        loss = criterion(masks, labels, iou_predictions)
+        # loss1: mask loss
+        mask_loss = criterion(masks, labels, iou_predictions)
+        # loss2: normal edge mask loss
+        normal_edge_labels = batched_input["normal_edge_mask"]
+        normal_edge_mask_loss = criterion(normal_edge_masks, normal_edge_labels, normal_edge_iou_predictions)
+        # loss3: cluster edge mask loss
+        # todo
+
+        loss = 0.5 * mask_loss + 0.5 * normal_edge_mask_loss
+
         loss.backward(retain_graph=False)
 
         optimizer.step()
@@ -188,8 +200,8 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, test
             if p == init_mask_num or p == args.iter_point - 1:
                 batched_input = setting_prompt_none(batched_input)
 
-            masks, low_res_masks, iou_predictions = prompt_and_decoder(
-                args, batched_input, model, image_embeddings, decoder_iter=True)
+            masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+                prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=True)
 
             loss = criterion(masks, labels, iou_predictions)
             loss.backward(retain_graph=True)
@@ -378,7 +390,7 @@ def main(args):
 
     global_metrics_dict["Loss/train"] = 1.0 # initial setting for pretrain weights
     global_metrics_dict["Loss/test"] = 1.0
-    wandb.log(global_metrics_dict, step=global_step+1, commit=True)
+    wandb.log(global_metrics_dict, step=global_step+args.batch_size, commit=True)
     
     global_metrics_dict = {}
     

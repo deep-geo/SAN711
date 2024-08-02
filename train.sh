@@ -6,8 +6,8 @@ python train.py \
 --seed 42 \
 --epochs 1000 \
 --batch_size 16 \
---num_workers 16 \
---eval_interval 100 \
+--num_workers 8 \
+--eval_interval 527 \
 --test_sample_rate 0.1 \
 --image_size 256 \
 --mask_num 5 \
