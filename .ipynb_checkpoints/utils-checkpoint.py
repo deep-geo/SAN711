@@ -45,6 +45,48 @@ def get_normal_edge_mask(mask_fl32: np.ndarray, mask_val: int = None) -> np.ndar
     return normal_edge_mask
 
 
+def get_cluster_edge_mask(mask_fl32, mask_value, iterations: int = 2):
+    """
+    Generate cluster edge masks from grayscale instance segmentation masks.
+    Identifies edges between touching cells.
+
+    Args:
+    - label (numpy.ndarray): Grayscale instance segmentation mask.
+
+    Returns:
+    - numpy.ndarray: Binary cluster edge mask.
+    """
+    # Dilate the label to make adjacent instances overlap
+    mask = mask_fl32.copy()
+    kernel = np.ones((3, 3), np.uint8)
+    dilated_label = cv2.dilate(mask, kernel, iterations=iterations)
+
+    # Identify where the dilated label differs from the original,
+    # indicating potential cluster edges
+    potential_cluster_edges = dilated_label != mask
+
+    # Initialize cluster edge mask
+    cluster_edge_mask = np.zeros(mask.shape, dtype=np.uint8)
+
+    # Iterate through potential cluster edges and validate
+    # against original label
+    for y in range(mask.shape[0]):
+        for x in range(mask.shape[1]):
+            if potential_cluster_edges[y, x]:
+                # Get the original and dilated values
+                original_value = mask[y, x]
+                dilated_value = dilated_label[y, x]
+
+                # If the dilated value is different from the original,
+                # and neither is background
+                if (original_value != dilated_value and original_value != 0 and
+                        dilated_value != 0 and dilated_value == mask_value):
+                    # Mark as cluster edge
+                    cluster_edge_mask[y, x] = 1
+
+    return cluster_edge_mask
+
+
 def get_boxes_from_mask(mask, box_num=1, std = 0.1, max_pixel = 5):
     """
     Args:
@@ -482,6 +524,13 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
         dense_prompt_embeddings=dense_embeddings,
         multimask_output=args.multimask,
     )
+    normal_edge_low_res_masks, normal_edge_iou_predictions = model.normal_edge_mask_decoder(
+        image_embeddings=image_embeddings,
+        image_pe=model.prompt_encoder.get_dense_pe(),
+        sparse_prompt_embeddings=sparse_embeddings,
+        dense_prompt_embeddings=dense_embeddings,
+        multimask_output=args.multimask,
+    )
 
     if args.multimask:
         max_values, max_indexs = torch.max(iou_predictions, dim=1)
@@ -494,7 +543,21 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
 
     masks = F.interpolate(low_res_masks, (args.image_size, args.image_size),
                           mode="bilinear", align_corners=False)
-    return masks, low_res_masks, iou_predictions
+
+    if args.multimask:
+        normal_edge_max_values, normal_max_indexs = torch.max(iou_predictions, dim=1)
+        normal_edge_max_values = normal_edge_max_values.unsqueeze(1)
+        normal_edge_iou_predictions = normal_edge_max_values
+        low_res = []
+        for i, idx in enumerate(normal_max_indexs):
+            low_res.append(normal_edge_low_res_masks[i:i + 1, idx])
+        normal_edge_low_res_masks = torch.stack(low_res, 0)
+
+    normal_edge_masks = F.interpolate(normal_edge_low_res_masks, (args.image_size, args.image_size),
+                          mode="bilinear", align_corners=False)
+
+    return (masks, low_res_masks, iou_predictions,
+            normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions)
 
 
 class MaskPredictor:
@@ -554,8 +617,10 @@ def apply_colormap(mask):
     return colored_mask
 
 
+
+
 def log_predictions_to_wandb(image_paths, seg_masks, seg_masks_gt, 
-                             #normal_edge_masks, normal_edge_masks_gt, cluster_edge_masks, cluster_edge_masks_gt,
+                             normal_edge_masks, normal_edge_masks_gt, cluster_edge_masks, cluster_edge_masks_gt,
                              step, prefix='visual compare', num_samples=5):
     """
     Log raw input, ground truth and prediction masks and original images to wandb.
@@ -578,15 +643,19 @@ def log_predictions_to_wandb(image_paths, seg_masks, seg_masks_gt,
         # predicted logits to image
         seg_mask_img = logits2image(seg_masks[idx, 0, :, :])
         seg_mask_img = apply_colormap(seg_mask_img)
-        # norm_edge_mask_img = logits2image(normal_edge_masks[idx, 0, :, :])
-        # cluster_edge_mask_img = logits2image(cluster_edge_masks[idx, 0, :, :])
+        norm_edge_mask_img = logits2image(normal_edge_masks[idx, 0, :, :])
+        norm_edge_mask_img = apply_colormap(norm_edge_mask_img)
+        cluster_edge_mask_img = logits2image(cluster_edge_masks[idx, 0, :, :])
+        cluster_edge_mask_img = apply_colormap(cluster_edge_mask_img)
         
 
         # binary gt to image
         seg_mask_gt_img = binary_gt2image(seg_masks_gt[idx, 0, :, :])
         seg_mask_gt_img = apply_colormap(seg_mask_gt_img)
-        # norm_edge_mask_gt_img = binary_gt2image(normal_edge_masks_gt[idx, 0, :, :])
-        # cluster_edge_mask_gt_img = binary_gt2image(cluster_edge_masks_gt[idx, 0, :, :])
+        norm_edge_mask_gt = binary_gt2image(normal_edge_masks_gt[idx, 0, :, :])
+        norm_edge_mask_gt = apply_colormap(norm_edge_mask_gt)
+        cluster_edge_mask_gt = binary_gt2image(cluster_edge_masks_gt[idx, 0, :, :])
+        cluster_edge_mask_gt = apply_colormap(cluster_edge_mask_gt)
 
 
         # combined_img = np.hstack((ori_img, seg_mask_img, seg_mask_gt_img,
@@ -601,7 +670,8 @@ def log_predictions_to_wandb(image_paths, seg_masks, seg_masks_gt,
         #                          cluster_edge_mask_img, cluster_edge_mask_gt_img))
 
         combined_img = np.hstack((ori_img, separator, seg_mask_gt_img, separator, seg_mask_img, 
-#                                  separator, norm_edge_mask_gt_img,separator, norm_edge_mask_img
+                                  separator, norm_edge_mask_gt, separator, norm_edge_mask_img,
+                                  separator, cluster_edge_mask_gt, separator, cluster_edge_mask_img
                                  ))
 
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -614,10 +684,15 @@ def log_predictions_to_wandb(image_paths, seg_masks, seg_masks_gt,
         cv2.putText(combined_img, "Raw Input", (10, text_y), font, font_scale, color, thickness, line_type)
         cv2.putText(combined_img, "GT", (ori_img.shape[1] + 20, text_y), font, font_scale, color, thickness, line_type)
         cv2.putText(combined_img, "Pred.", (2 * ori_img.shape[1] + 30, text_y), font, font_scale, color, thickness, line_type)
+        cv2.putText(combined_img, "GT_Edge", (ori_img.shape[1] + 40, text_y), font, font_scale, color, thickness, line_type)
+        cv2.putText(combined_img, "Pred._Edge", (2 * ori_img.shape[1] + 50, text_y), font, font_scale, color, thickness, line_type)
+        cv2.putText(combined_img, "GT_ClusterE", (ori_img.shape[1] + 60, text_y), font, font_scale, color, thickness, line_type)
+        cv2.putText(combined_img, "Pred._ClusterE", (2 * ori_img.shape[1] + 70, text_y), font, font_scale, color, thickness, line_type)
 
 
         # Log to wandb
         wandb.log({
             f"{prefix}/prediction_{idx}": wandb.Image(combined_img, caption=f"Step {step}")
         })
+
 
