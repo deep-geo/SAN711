@@ -13,7 +13,7 @@ import albumentations as A
 from typing import List
 from albumentations.pytorch import ToTensorV2
 from utils import get_boxes_from_mask, init_point_sampling, \
-    get_edge_points_from_mask, get_transform, get_normal_edge_mask
+    get_edge_points_from_mask, get_transform, get_normal_edge_mask, get_cluster_edge_mask
 from torch.utils.data import Dataset, DataLoader, Sampler
 from preprocess.split_dataset import split_dataset
 
@@ -113,7 +113,8 @@ class TestingDataset(Dataset):
         if self.prompt_path is None:
             boxes = get_boxes_from_mask(mask, max_pixel=0)
             point_coords, point_labels = init_point_sampling(mask, self.point_num)
-            normal_edge_mask = get_normal_edge_mask(ori_np_mask, mask_val)
+            # normal_edge_mask = get_normal_edge_mask(ori_np_mask, mask_val)
+            cluster_edge_mask = get_cluster_edge_mask(ori_np_mask, mask_val)
             if self.edge_point_num:
                 edge_point_coords = get_edge_points_from_mask(mask_val, ori_np_mask,
                                                               self.edge_point_num)
@@ -135,8 +136,9 @@ class TestingDataset(Dataset):
         image_input["image"] = image
         
         # image_input["label"] = mask.unsqueeze(0)
-        image_input["label"] = torch.as_tensor(normal_edge_mask, dtype=torch.float32).unsqueeze(0)
-        
+        # image_input["label"] = torch.as_tensor(normal_edge_mask, dtype=torch.float32).unsqueeze(0)
+        image_input["label"] = torch.as_tensor(cluster_edge_mask, dtype=torch.float32).unsqueeze(0)
+
         image_input["point_coords"] = point_coords
         image_input["point_labels"] = point_labels
         image_input["boxes"] = boxes
@@ -256,7 +258,8 @@ class TrainingDataset(Dataset):
 
 
             normal_edge_mask_list = []
-            
+            cluster_edge_mask_list = []
+
             for mask_val in choices_nuclei:
                 pre_mask = original_mask.copy()
 
@@ -272,8 +275,11 @@ class TrainingDataset(Dataset):
                 point_coords, point_label = init_point_sampling(
                     mask_tensor,  self.point_num)
 
-                normal_edge_mask = get_normal_edge_mask(original_mask, mask_val)
-                normal_edge_mask_list.append(torch.tensor(normal_edge_mask, dtype=torch.int32))
+                # normal_edge_mask = get_normal_edge_mask(original_mask, mask_val)
+                # normal_edge_mask_list.append(torch.tensor(normal_edge_mask, dtype=torch.int32))
+
+                cluster_edge_mask = get_cluster_edge_mask(original_mask, mask_val)
+                cluster_edge_mask_list.append(torch.tensor(cluster_edge_mask, dtype=torch.int32))
 
                 masks_list.append(mask_tensor)
                 boxes_list.append(boxes)
@@ -285,8 +291,9 @@ class TrainingDataset(Dataset):
                     edge_point_coords_list.append(edge_point_coords)
 
             # mask = torch.stack(masks_list, dim=0)
-            mask = torch.stack(normal_edge_mask_list, dim=0)
-            
+            # mask = torch.stack(normal_edge_mask_list, dim=0)
+            mask = torch.stack(cluster_edge_mask_list, dim=0)
+
             boxes = torch.stack(boxes_list, dim=0)
             point_coords = torch.stack(point_coords_list, dim=0)
             point_labels = torch.stack(point_labels_list, dim=0)
