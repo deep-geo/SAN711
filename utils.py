@@ -531,6 +531,13 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
         dense_prompt_embeddings=dense_embeddings,
         multimask_output=args.multimask,
     )
+    cluster_edge_low_res_masks, cluster_edge_iou_predictions = model.cluster_edge_mask_decoder(
+        image_embeddings=image_embeddings,
+        image_pe=model.prompt_encoder.get_dense_pe(),
+        sparse_prompt_embeddings=sparse_embeddings,
+        dense_prompt_embeddings=dense_embeddings,
+        multimask_output=args.multimask,
+    )
 
     if args.multimask:
         max_values, max_indexs = torch.max(iou_predictions, dim=1)
@@ -541,8 +548,10 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
             low_res.append(low_res_masks[i:i + 1, idx])
         low_res_masks = torch.stack(low_res, 0)
 
-    masks = F.interpolate(low_res_masks, (args.image_size, args.image_size),
-                          mode="bilinear", align_corners=False)
+    masks = F.interpolate(
+        low_res_masks, (args.image_size, args.image_size),
+        mode="bilinear", align_corners=False
+    )
 
     if args.multimask:
         normal_edge_max_values, normal_max_indexs = torch.max(iou_predictions, dim=1)
@@ -553,11 +562,28 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
             low_res.append(normal_edge_low_res_masks[i:i + 1, idx])
         normal_edge_low_res_masks = torch.stack(low_res, 0)
 
-    normal_edge_masks = F.interpolate(normal_edge_low_res_masks, (args.image_size, args.image_size),
-                          mode="bilinear", align_corners=False)
+    normal_edge_masks = F.interpolate(
+        normal_edge_low_res_masks, (args.image_size, args.image_size),
+        mode="bilinear", align_corners=False
+    )
+
+    if args.multimask:
+        cluster_edge_max_values, cluster_max_indexs = torch.max(iou_predictions, dim=1)
+        cluster_edge_max_values = cluster_edge_max_values.unsqueeze(1)
+        cluster_edge_iou_predictions = cluster_edge_max_values
+        low_res = []
+        for i, idx in enumerate(cluster_max_indexs):
+            low_res.append(cluster_edge_low_res_masks[i:i + 1, idx])
+        cluster_edge_low_res_masks = torch.stack(low_res, 0)
+
+    cluster_edge_masks = F.interpolate(
+        cluster_edge_low_res_masks, (args.image_size, args.image_size),
+        mode="bilinear", align_corners=False
+    )
 
     return (masks, low_res_masks, iou_predictions,
-            normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions)
+            normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions,
+            cluster_edge_masks, cluster_edge_low_res_masks, cluster_edge_iou_predictions)
 
 
 class MaskPredictor:
@@ -596,9 +622,6 @@ class MaskPredictor:
             images = [cv2.cvtColor(cv2.imread(_), cv2.COLOR_BGR2RGB) for _ in images]
         masks = [self.predict(_) for _ in images]
         return masks
-
-
-
 
 
 def logits2image(t: torch.Tensor) -> np.ndarray:

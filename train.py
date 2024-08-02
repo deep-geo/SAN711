@@ -61,7 +61,9 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
         if args.boxes_prompt:
             save_path = os.path.join(args.work_dir, args.run_name, "boxes_prompt")
             batched_input["point_coords"], batched_input["point_labels"] = None, None
-            masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+            masks, low_res_masks, iou_predictions, \
+            normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions, \
+            cluster_edge_masks, cluster_edge_low_res_masks, cluster_edge_iou_predictions = \
                 prompt_and_decoder(args, batched_input, model, image_embeddings)
             points_show = None
 
@@ -74,7 +76,9 @@ def eval_model(args, model, test_loader, output_dataset_metrics: bool = False):
                 batched_input["point_labels"]]
 
             for p in range(args.iter_point):
-                masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+                masks, low_res_masks, iou_predictions, \
+                normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions, \
+                cluster_edge_masks, cluster_edge_low_res_masks, cluster_edge_iou_predictions = \
                     prompt_and_decoder(args, batched_input, model, image_embeddings)
                 if p != args.iter_point - 1:
                     batched_input = generate_point(masks, labels, low_res_masks, batched_input, args.point_num)
@@ -163,7 +167,9 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, test
 
         image_embeddings = torch.cat(image_embeddings_repeat, dim=0)
 
-        masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+        masks, low_res_masks, iou_predictions, \
+        normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions, \
+        cluster_edge_masks, cluster_edge_low_res_masks, cluster_edge_iou_predictions = \
             prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=False)
 
         # loss1: mask loss
@@ -198,7 +204,9 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, test
             if p == init_mask_num or p == args.iter_point - 1:
                 batched_input = setting_prompt_none(batched_input)
 
-            masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+            masks, low_res_masks, iou_predictions, \
+            normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions, \
+            cluster_edge_masks, cluster_edge_low_res_masks, cluster_edge_iou_predictions = \
                 prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=True)
 
             loss = criterion(masks, labels, iou_predictions)
@@ -402,4 +410,16 @@ if __name__ == '__main__':
     mp.set_start_method('spawn')
     args = parse_train_args()
     #args.encoder_adapter = True
+
+    # args.batch_size = 2
+    # args.test_sample_rate = 0.01
+    # args.test_size = 0.1
+    # args.num_workers = 2
+    # args.image_size = 256
+    # args.data_root = "/Users/zhaojq/Datasets/ALL_Multi"
+    # args.checkpoint = "sam_vit_b_01ec64.pth"
+    # args.boxes_prompt = True
+    # args.eval_interval = 5
+    # args.point_num = 1
+
     main(args)
