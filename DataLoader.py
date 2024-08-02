@@ -127,7 +127,8 @@ class TestingDataset(Dataset):
             point_labels = torch.as_tensor(
                 self.prompt_list[prompt_key]["point_labels"], dtype=torch.int)
 
-            normal_edge_mask = get_normal_edge_mask(ori_np_mask, mask_val)
+            # normal_edge_mask = get_normal_edge_mask(ori_np_mask, mask_val)
+            cluster_edge_mask = get_cluster_edge_mask(ori_np_mask, mask_val)
 
             if self.edge_point_num:
                 edge_point_coords = torch.as_tensor(
