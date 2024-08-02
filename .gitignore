@@ -5,3 +5,4 @@
 /examples
 /assets
 .idea
+__pycache__
