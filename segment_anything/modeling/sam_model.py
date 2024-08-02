@@ -21,6 +21,7 @@ class Sam(nn.Module):
         image_encoder: ImageEncoderViT,
         prompt_encoder: PromptEncoder,
         mask_decoder: MaskDecoder,
+        normal_edge_mask_decoder: MaskDecoder,
         pixel_mean: List[float] = [123.675, 116.28, 103.53],
         pixel_std: List[float] = [58.395, 57.12, 57.375],
     ) -> None:
@@ -40,6 +41,7 @@ class Sam(nn.Module):
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
+        self.normal_edge_mask_decoder = normal_edge_mask_decoder
         self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
         self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
 
@@ -70,18 +72,34 @@ class Sam(nn.Module):
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
         )
+        low_res_normal_edge_masks, normal_edge_iou_predictions = self.normal_edge_mask_decoder(
+            image_embeddings=image_embeddings,
+            image_pe=self.prompt_encoder.get_dense_pe(),  # 1x(256)x(64)x(64)
+            sparse_prompt_embeddings=sparse_embeddings,
+            dense_prompt_embeddings=dense_embeddings,
+            multimask_output=multimask_output,
+        )
 
         masks = self.postprocess_masks(
             low_res_masks,
             input_size=batched_input["image"].shape[-2:],
             original_size=batched_input["original_size"],
         )
+        normal_edge_masks = self.postprocess_masks(
+            low_res_normal_edge_masks,
+            input_size=batched_input["image"].shape[-2:],
+            original_size=batched_input["original_size"],
+        )
 
         outputs = {
-                    "masks": masks,
-                    "iou_predictions": iou_predictions,
-                    "low_res_logits": low_res_masks,
-                }
+            "masks": masks,
+            "iou_predictions": iou_predictions,
+            "low_res_logits": low_res_masks,
+
+            "normal_edge_masks": normal_edge_masks,
+            "normal_edge_iou_predictions": normal_edge_iou_predictions,
+            "normal_edge_low_res_logits": low_res_normal_edge_masks,
+        }
 
         return outputs
 

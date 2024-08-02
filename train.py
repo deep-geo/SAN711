@@ -162,10 +162,19 @@ def train_one_epoch(args, model, optimizer, train_loader, epoch, criterion, test
 
         image_embeddings = torch.cat(image_embeddings_repeat, dim=0)
 
-        masks, low_res_masks, iou_predictions = prompt_and_decoder(
-            args, batched_input, model, image_embeddings, decoder_iter=False)
+        masks, low_res_masks, iou_predictions, normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions = \
+            prompt_and_decoder(args, batched_input, model, image_embeddings, decoder_iter=False)
 
-        loss = criterion(masks, labels, iou_predictions)
+        # loss1: mask loss
+        mask_loss = criterion(masks, labels, iou_predictions)
+        # loss2: normal edge mask loss
+        normal_edge_labels = batched_input["normal_edge_mask"]
+        normal_edge_mask_loss = criterion(normal_edge_masks, normal_edge_labels, normal_edge_iou_predictions)
+        # loss3: cluster edge mask loss
+        # todo
+
+        loss = 0.5 * mask_loss + 0.5 * normal_edge_mask_loss
+
         loss.backward(retain_graph=False)
 
         optimizer.step()

@@ -524,6 +524,13 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
         dense_prompt_embeddings=dense_embeddings,
         multimask_output=args.multimask,
     )
+    normal_edge_low_res_masks, normal_edge_iou_predictions = model.normal_edge_mask_decoder(
+        image_embeddings=image_embeddings,
+        image_pe=model.prompt_encoder.get_dense_pe(),
+        sparse_prompt_embeddings=sparse_embeddings,
+        dense_prompt_embeddings=dense_embeddings,
+        multimask_output=args.multimask,
+    )
 
     if args.multimask:
         max_values, max_indexs = torch.max(iou_predictions, dim=1)
@@ -536,7 +543,21 @@ def prompt_and_decoder(args, batched_input, model, image_embeddings,
 
     masks = F.interpolate(low_res_masks, (args.image_size, args.image_size),
                           mode="bilinear", align_corners=False)
-    return masks, low_res_masks, iou_predictions
+
+    if args.multimask:
+        normal_edge_max_values, normal_max_indexs = torch.max(iou_predictions, dim=1)
+        normal_edge_max_values = normal_edge_max_values.unsqueeze(1)
+        normal_edge_iou_predictions = normal_edge_max_values
+        low_res = []
+        for i, idx in enumerate(normal_max_indexs):
+            low_res.append(normal_edge_low_res_masks[i:i + 1, idx])
+        normal_edge_low_res_masks = torch.stack(low_res, 0)
+
+    normal_edge_masks = F.interpolate(normal_edge_low_res_masks, (args.image_size, args.image_size),
+                          mode="bilinear", align_corners=False)
+
+    return (masks, low_res_masks, iou_predictions,
+            normal_edge_masks, normal_edge_low_res_masks, normal_edge_iou_predictions)
 
 
 class MaskPredictor:
