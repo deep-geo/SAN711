@@ -276,11 +276,11 @@ class TrainingDataset(Dataset):
                 point_coords, point_label = init_point_sampling(
                     mask_tensor,  self.point_num)
 
-                # normal_edge_mask = get_normal_edge_mask(original_mask, mask_val)
-                # normal_edge_mask_list.append(torch.tensor(normal_edge_mask, dtype=torch.int32))
+                normal_edge_mask = get_normal_edge_mask(original_mask, mask_val)
+                normal_edge_mask_list.append(torch.tensor(normal_edge_mask, dtype=torch.int32))
 
-                cluster_edge_mask = get_cluster_edge_mask(original_mask, mask_val)
-                cluster_edge_mask_list.append(torch.tensor(cluster_edge_mask, dtype=torch.int32))
+                # cluster_edge_mask = get_cluster_edge_mask(original_mask, mask_val)
+                # cluster_edge_mask_list.append(torch.tensor(cluster_edge_mask, dtype=torch.int32))
 
                 masks_list.append(mask_tensor)
                 boxes_list.append(boxes)
